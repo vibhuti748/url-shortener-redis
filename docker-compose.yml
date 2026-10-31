@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: shortener
       POSTGRES_PASSWORD: shortener
@@ -14,14 +15,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
+ 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "6379:6379"
-
+ 
   app:
     build: .
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
@@ -34,6 +37,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-
+ 
 volumes:
   pgdata:
+ 
