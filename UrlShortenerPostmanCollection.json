@@ -1,0 +1,249 @@
+{
+  "info": {
+    "name": "URL Shortener API",
+    "description": "Requests for the URL shortener (Flask, PostgreSQL, Redis). Set the baseUrl collection variable to your server, e.g. http://<EC2_PUBLIC_IP>:5000. Run 'Create short link' first: it saves the code used by the redirect request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "shortCode",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Create short link",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.test(\"Has short_code and short_url\", function () {",
+              "  pm.expect(json).to.have.property(\"short_code\");",
+              "  pm.expect(json).to.have.property(\"short_url\");",
+              "});",
+              "pm.collectionVariables.set(\"shortCode\", json.short_code);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://www.google.com\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Expected: 201 with short_code and short_url. Saves short_code into the shortCode variable."
+      }
+    },
+    {
+      "name": "Redirect to original URL",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Redirect followed, final status is 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/{{shortCode}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{shortCode}}"
+          ]
+        },
+        "description": "Expected: Postman follows the redirect and lands on the original site (200)."
+      }
+    },
+    {
+      "name": "Redirect (view raw 302)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 302\", function () { pm.response.to.have.status(302); });",
+              "pm.test(\"Location header points to the original URL\", function () {",
+              "  pm.expect(pm.response.headers.get(\"Location\")).to.eql(\"https://www.google.com\");",
+              "});",
+              "pm.test(\"X-Cache header is present\", function () {",
+              "  pm.expect(pm.response.headers.has(\"X-Cache\")).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/{{shortCode}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{shortCode}}"
+          ]
+        },
+        "description": "Expected: 302 with a Location header and an X-Cache header (HIT or MISS). Redirects are not followed."
+      },
+      "protocolProfileBehavior": {
+        "followRedirects": false
+      }
+    },
+    {
+      "name": "Unknown code returns 404",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 404\", function () { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/zzzz",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "zzzz"
+          ]
+        },
+        "description": "Expected: 404 with an error message."
+      }
+    },
+    {
+      "name": "Invalid URL returns 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"hello\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Expected: 400 with the message 'Provide a valid http/https URL'."
+      }
+    },
+    {
+      "name": "Rate limit returns 429",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 201 or 429\", function () { pm.expect(pm.response.code).to.be.oneOf([201, 429]); });",
+              "if (pm.response.code === 429) {",
+              "  pm.test(\"Retry-After header is present\", function () {",
+              "    pm.expect(pm.response.headers.has(\"Retry-After\")).to.be.true;",
+              "  });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://example.com\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "shorten"
+          ]
+        },
+        "description": "Send this request 11+ times within a minute (Collection Runner with 12 iterations works). Expected: 201 for the first 10, then 429 with a Retry-After header."
+      }
+    }
+  ]
+}
